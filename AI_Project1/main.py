@@ -1,33 +1,17 @@
 #A* algorithm for romanian cities
-#A* has heuristics so maybe play with it
 import csv
 from tkinter import *
 
 
-
-#Find way to display on screen things. (ie find libraries)
-#City have distances
-
-#Structure for the cities.
-#Cities are nodes, bidirectional, they should see the connecting nodes.
-
-#A* works on a node map, first create that then use A*.
-#A* produces the path (list of nodes) to the destination.
-
-#Meaning we need a destination city and an end city.
-
-
-
-#Create a csv file with distances?
-#Save distances from a city to another in a dictionary?
-#2 types of distance, position distance and road distance. How do I represent them?
-
-#IMPORTANT VALUES
 CANVAS_WIDTH = 800
 CANVAS_HEIGHT = 600
+
+#Ensures points are relative to the canvas center
 CENTER_X = CANVAS_WIDTH // 2
 CENTER_Y = CANVAS_HEIGHT // 2
-MULTIPLIER = 20             #Zooms in and out
+
+#Zooms in and out
+MULTIPLIER = 20
 
 #All city names can be found in folder Heuristics.csv
 START_CITY = "Arad"
@@ -88,6 +72,7 @@ class City:
                     self.x = float(row[2])
                     self.y = float(row[3])
 
+#Uses City type as nodes
 class Graph:
     def __init__(self,Cities):
         self.Cities = Cities
@@ -113,7 +98,8 @@ class Graph:
     def getCities(self):
         return self.connections
 
-#Create the MinHeap Properly
+
+#Uses City type as elements of the minHeap
 class MinHeap:
     def __init__(self,cities = None):
         self.list = []
@@ -148,6 +134,7 @@ class MinHeap:
 
 
         while index > 0 and self.list[parent].getfScore() > self.list[index].getfScore():
+
             #Do the swap
             temp = self.list[index]
             self.list[index] = self.list[parent]
@@ -229,11 +216,9 @@ class MinHeap:
         print("------minHeap-----\n")
 
 class MapPoint:
-    def __init__(self,x,y,cityObject):
+    def __init__(self,x,y):
         self.x = x
         self.y = y
-        self.city = cityObject
-
 #Generate the cities based on the city list
 def generateCities(city_list):
     return_list = {}
@@ -269,22 +254,23 @@ def reconstructPath(dict,current):
 
 
 
-def A_Star(start_city, end_city,cities,lines_dict):
+def A_Star(start_city, end_city,cities):
 
 
 
     graphClass = Graph(cities)      #Graph is {City : {City: Distance}} style
     graph = graphClass.getCities()
+    prev = {}  # {City : City}
 
-
-    openList = MinHeap()            #Priority Queue
+    openList = MinHeap()
     openList.add(start_city)
 
-    prev = {}   #{City : City}
-    start_city.gScore = 0
 
+    start_city.gScore = 0
     start_city.fScore = start_city.getHeuristics()
 
+
+    #Yield is used to pass the required values in order to update the visualizer at every step
 
     while len(openList.list) > 0:
         openList.printMinHeap()
@@ -299,11 +285,10 @@ def A_Star(start_city, end_city,cities,lines_dict):
 
         for neighbor in graph[current].keys():
 
-            yield current, neighbor, reconstructPath(prev,current)
-
             distance = graph[current][neighbor]               #Distance from current to neighbor
             tentative_gScore =  current.getgScore() + distance
 
+            yield current, neighbor, reconstructPath(prev, current)
 
             if tentative_gScore < neighbor.getgScore():
 
@@ -312,7 +297,7 @@ def A_Star(start_city, end_city,cities,lines_dict):
                 neighbor.gScore = tentative_gScore
                 neighbor.fScore = tentative_gScore + neighbor.getHeuristics()
 
-
+                yield current,neighbor,reconstructPath(prev, current)
 
                 if neighbor not in openList:
                     openList.add(neighbor)
@@ -321,20 +306,17 @@ def A_Star(start_city, end_city,cities,lines_dict):
 
 
 def plotPoint(city,canvas,color = "blue",size = 12):
-    # Translate the Cartesian coordinates to canvas coordinates
-    canvas_x = CENTER_X + city.x * MULTIPLIER  # Positive X moves to the right
-    canvas_y = CENTER_Y - city.y * MULTIPLIER  # Negative Y moves down, positive Y moves up
+    #Compute the coordinates relative to the canvas center
+    canvas_x = CENTER_X + city.x * MULTIPLIER
+    canvas_y = CENTER_Y - city.y * MULTIPLIER
 
-    # Draw the point at (canvas_x, canvas_y)
+
     canvas.create_oval(canvas_x + size/2, canvas_y + size/2, canvas_x - size/2, canvas_y - size/2, fill=color)
     canvas.create_text(canvas_x - 10, canvas_y - 15, text=city.getName())
     canvas.create_text(canvas_x -20, canvas_y + 20, text=city.fScore)
 
 
 def plotCityPoints(cities,canvas):
-    # Shift the origin to the center of the canvas
-    multiplier = 20
-
     for city in cities.values():
         plotPoint(city,canvas)
 
@@ -360,18 +342,16 @@ def drawCurrentPath(path,canvas):
             drawLine(path[i - 1], path[i], canvas, color="blue", width=2)
 
 
-def visualiser(generator, canvas, lines_dict, cities,connections):
-#I can send information about active nodes (Which ones are doing the searching)
-#I can have nodes keep track of weather they are in the current path or not
-#(since at each pop I send the new path I can turn all the nodes in the path on and switch off the others that are not in the path)
-#(if switch is off color is red, if switch is on color is blue, if active node color is yellow or smth)
+def visualiser(generator, canvas, cities,connections):
+#This will update the canvas at each step.
 
 
     try:
         arg1, arg2, arg3 = next(generator)  # Get the next step in the algorithm
         #Codes: arg1 = None => arg2 is a path to be drawn
             #   arg2 = None => algorithm finished.
-            #   arg3 != None => draw the previous path
+            #   else: arg1 = current point, arg2 = neighbor
+            #   arg3 is used to draw the shortest path known so far
 
 
         canvas.delete("all")
@@ -386,34 +366,34 @@ def visualiser(generator, canvas, lines_dict, cities,connections):
             print("A* Algorithm Finished!")
             return
 
-        #This draws the path
+
         elif arg1 is None:
+            # This draws the path
             drawCurrentPath(arg2,canvas)
 
         else:
+
             plotPoint(arg1,canvas,color="yellow")
             drawCurrentPath(arg3, canvas)
             drawLine(arg1, arg2, canvas, "red",3)
 
-        # Draw the current path segment on the canvas
 
 
-        # Schedule the next step after 500ms (adjust delay as needed)
-        canvas.after(1000, visualiser, generator, canvas, lines_dict,cities,connections)
+
+        canvas.after(1000, visualiser, generator, canvas,cities,connections)
 
     except StopIteration:
 
         print("A* Algorithm Finished!")
 
-
-#relative to 0,0
+#Helper functions
 def modifyDistanceByPercentage(percentage):
+    # relative to 0,0
     with open('Heuristics.csv', 'r',newline='\n') as csv_file:
         reader = csv.reader(csv_file)
         for row in reader:
             new_row = row[0]+","+row[1]+","+str(float(row[2])*percentage)+","+str(float(row[3])*percentage)
             print (new_row)
-
 def shiftPositionOnAxis(axis,distance):
     if axis == 'x' or axis == 'X':
         with open('Heuristics.csv', 'r', newline='\n') as csv_file:
@@ -428,23 +408,26 @@ def shiftPositionOnAxis(axis,distance):
                 new_row = row[0] +","+row[1]+","+row[2]+","+str(float(row[3])+distance)
                 print(new_row)
 
+
 def main():
 
-    heuristics = getHeuristics()                        #Heuristics (Strings not City type)
-    cities = generateCities(getCityList(heuristics))    #Nodes (Cities)
+    heuristics = getHeuristics()                        #Heuristics (type Strings)
+    cities = generateCities(getCityList(heuristics))    #Nodes (type Cities)
     graph = Graph(cities)                               #Graph (Connections + Nodes)
-    lines_dict = {}
 
     root = Tk()
     canvas = Canvas(root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT)
-    canvas.pack()
+    heap_frame = Frame(root, width=200, height=CANVAS_HEIGHT)
+
+    canvas.pack(side=LEFT)
+    heap_frame.pack(side=RIGHT)
+
     plotCityPoints(cities,canvas)
     plotCityConnections(graph.connections,canvas)
 
+    generator = A_Star(cities[START_CITY], cities[END_CITY], cities)
 
-    generator = A_Star(cities[START_CITY], cities[END_CITY], cities,lines_dict)
-
-    root.after(1000,visualiser,generator,canvas,lines_dict,cities,graph.connections)
+    canvas.after(1000,visualiser,generator,canvas,cities,graph.connections)
 
     root.mainloop()
 
@@ -455,10 +438,6 @@ def main():
 if __name__ == '__main__':
     main()
 
-#LEFT TO DO: FIGURE OUT A CONCRETE DATA REPRESENTATION (Min Heap does not sound bad)
-            #Decide on visualization or console based program
-            #Create the node graph - This is important.
-            #Implement A* from scratch
 
 
 
